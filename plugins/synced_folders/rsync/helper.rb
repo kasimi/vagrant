@@ -43,10 +43,10 @@ module VagrantPlugins
           guestpath = machine.guest.capability(:rsync_scrub_guestpath, opts)
         end
 
-        if Vagrant::Util::Platform.windows?
-          # rsync for Windows expects cygwin style paths, always.
-          hostpath = Vagrant::Util::Platform.cygwin_path(hostpath)
-        end
+        #if Vagrant::Util::Platform.windows?
+        #  # rsync for Windows expects cygwin style paths, always.
+        #  hostpath = Vagrant::Util::Platform.cygwin_path(hostpath)
+        #end
 
         # Make sure the host path ends with a "/" to avoid creating
         # a nested directory...
@@ -74,9 +74,9 @@ module VagrantPlugins
         rsh = [
           "ssh -p #{ssh_info[:port]} " +
           proxy_command +
-          "-o ControlMaster=auto " +
-          "-o ControlPath=#{controlpath} " +
-          "-o ControlPersist=10m " +
+          #"-o ControlMaster=auto " +
+          #"-o ControlPath=#{controlpath} " +
+          #"-o ControlPersist=10m " +
           "-o StrictHostKeyChecking=no " +
           "-o IdentitiesOnly=true " +
           "-o UserKnownHostsFile=/dev/null",
@@ -125,7 +125,7 @@ module VagrantPlugins
           args,
           "-e", rsh,
           excludes.map { |e| ["--exclude", e] },
-          hostpath,
+          ".", # hostpath,
           "#{username}@#{host}:#{guestpath}",
         ].flatten
 
@@ -148,22 +148,24 @@ module VagrantPlugins
           machine.guest.capability(:rsync_pre, opts)
         end
 
-        if opts.include?(:verbose)
-          command_opts[:notify] = [:stdout, :stderr]
-          r = Vagrant::Util::Subprocess.execute(*(command + [command_opts])) {
-            |io_name,data| data.each_line { |line|
-              machine.ui.info("rsync[#{io_name}] -> #{line}") }
-          }
-        else
-          r = Vagrant::Util::Subprocess.execute(*(command + [command_opts]))
-        end
+        Dir.chdir(hostpath) do
+          if opts.include?(:verbose)
+            command_opts[:notify] = [:stdout, :stderr]
+            r = Vagrant::Util::Subprocess.execute(*(command + [command_opts])) {
+              |io_name,data| data.each_line { |line|
+                machine.ui.info("rsync[#{io_name}] -> #{line}") }
+            }
+          else
+            r = Vagrant::Util::Subprocess.execute(*(command + [command_opts]))
+          end
 
-        if r.exit_code != 0
-          raise Vagrant::Errors::RSyncError,
-            command: command.join(" "),
-            guestpath: guestpath,
-            hostpath: hostpath,
-            stderr: r.stderr
+          if r.exit_code != 0
+            raise Vagrant::Errors::RSyncError,
+              command: command.join(" "),
+              guestpath: guestpath,
+              hostpath: hostpath,
+              stderr: r.stderr
+          end
         end
 
         # If we have tasks to do after rsyncing, do those.
